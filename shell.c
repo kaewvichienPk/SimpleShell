@@ -5,7 +5,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include<sys/types.h>
+#include <sys/errno.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 // Constant needed
@@ -26,9 +28,6 @@ size_t count;
 char *simple_cmds[MAX_SIMPLE_CMDS]; // For storing simple command strings.
 char *cmd;                          // For storing the 'command word'.
 char *cmdargs[MAX_ARGS_PER_CMD];    // For storing additional 'argument words'.
-char *pathSla;
-char *pathVar;
-char *command;
 void show_prompt(char *prompt);
 int split_into_jobs(char *cmdline, char *jobs[], size_t count);
 int scan_seqops(int seqops[], char *jobstr, size_t count);
@@ -36,8 +35,8 @@ int extract_cmd_args(char *simple_cmd, char **cmd, char *cmdargs[],
                      size_t count);
 int extract_simple_cmds(char *jobstr, char *simple_cmds[], size_t count);
 int readline(int fd, char *buf, int bufsz);
-
-
+char *my_strdup(const char *s);
+int writeline(int fd, const char *str);
 int readline(int fd, char *buf, int bufsz) {
   int x = 0;
   char c;
@@ -66,11 +65,16 @@ int readline(int fd, char *buf, int bufsz) {
 
   return x;
 }
+int writeline(int fd, const char *str) {
+  return write(fd, (const void *)str, strlen(str));
 
+} /* end writeline() */
+// showing the prompt >>
 void show_prompt(char *prompt) {
-  printf("%s", prompt);
+  writeline(1, prompt);
   fflush(stdout);
 }
+// method for spliting the command into separate jobs using semicolon
 int split_into_jobs(char *cmdline, char *jobs[], size_t count) {
   char *delims = ";";
   int i;
@@ -83,12 +87,14 @@ int split_into_jobs(char *cmdline, char *jobs[], size_t count) {
 
   return i;
 }
+// method for scaning for operators
 int scan_seqops(int seqops[], char *jobstr, size_t count) {
   int i;
   int countsq = 0;
   for (i = 0; i < strlen(jobstr); ++i) {
     if (jobstr[i] == '&' && jobstr[i + 1] == '&') {
       seqops[countsq] = 1;
+
       ++countsq;
     }
 
@@ -99,7 +105,8 @@ int scan_seqops(int seqops[], char *jobstr, size_t count) {
   }
   return countsq;
 }
-
+/*This function splits a job string into simple commands using "&&" and "||" as
+ * delimiters,*/
 int extract_simple_cmds(char *jobstr, char *simple_cmds[], size_t count) {
   char *delims = "&&||";
   int i;
@@ -112,6 +119,7 @@ int extract_simple_cmds(char *jobstr, char *simple_cmds[], size_t count) {
 
   return i;
 }
+// method for extract the argument
 int extract_cmd_args(char *simple_cmd, char **cmd, char *cmdargs[],
                      size_t count) {
   char *delims = " ";
@@ -122,14 +130,18 @@ int extract_cmd_args(char *simple_cmd, char **cmd, char *cmdargs[],
     cmdargs[i] = token;
     if (i == 0) {
       *cmd = cmdargs[0];
-    } else if (i > 0) {
     }
   }
-
-  if (token == NULL && i == 1) {
-  }
-
   return i;
+}
+// method for copying the data
+char *my_strdup(const char *s) {
+  size_t len = strlen(s) + 1;
+  char *p = malloc(len);
+  if (p != NULL) {
+    memcpy(p, s, len);
+  }
+  return p;
 }
 int main(int argc, char *argv[]) {
   int bytes_read;
@@ -145,9 +157,10 @@ int main(int argc, char *argv[]) {
   pid_t pid, which_child;
   int child_status;
   char *cmd_pathname;
-  // test for path
+  char *myPath;
+  char *myPathCopy;
+
   while (1) {
-    printf("Simple Shell Phoomintr Kaewvichien\n");
     // Show the prompt to the user.
     show_prompt(">> ");
     // Read a complete line and store in buffer 'cmdline'.
@@ -159,11 +172,11 @@ int main(int argc, char *argv[]) {
       total_jobs = split_into_jobs(cmdline, jobs, MAX_JOBS_PER_LINE);
       // For _each_ job...
       for (int i = 0; i < total_jobs; ++i) {
-        // printf("Job #%d: \"%s\"\n", i, jobs[i]);
         //  Scan for sequence operators.
         seqops_cnt = scan_seqops(seqops, jobs[i], MAX_SIMPLE_CMDS);
+        // Check if sequence operators are more than simple commands
         if (seqops_cnt > MAX_SIMPLE_CMDS) {
-          printf("More seqops than MAX_SIMPLE_CMDS");
+          writeline(1, "More seqops than MAX_SIMPLE_CMDS");
         }
         // Split the job into simple commands...
         total_simple_cmds =
@@ -171,39 +184,54 @@ int main(int argc, char *argv[]) {
 
         // For _each_ simple comand...
         for (int j = 0; j < total_simple_cmds; ++j) {
+          for (int k = 0; k < MAX_ARGS_PER_CMD; k++) {
+            cmdargs[k] = NULL;
+          }
+
           //  Extract the commands and the arguments.
           total_tokens =
               extract_cmd_args(simple_cmds[j], &cmd, cmdargs, MAX_ARGS_PER_CMD);
 
           if (total_tokens > MAX_ARGS_PER_CMD) {
-            printf("More args than max_args_per_cmd");
+            writeline(1, "More args than max_args_per_cmd");
           }
-          // Check for path
-          path = getenv("PATH");
-          /*check if path has been retrive*/
-          if (path != NULL) {
-            // go thourgh every path
-            for (tok = strtok(path, delim); tok != NULL;
-                 tok = strtok(NULL, delim)) {
-              // put slash(/), path, and command into an variable
-              snprintf(sort, MAX_CMDLINE_SIZE, "%s/%s", tok, cmd);
-              //  Check access
-              rvalx = access(sort, X_OK);
-              if (rvalx == 0) {
-                break;
+          // Check if the commad start with /
+          if (strchr(cmd, '/') == NULL) {
+            // Create a path and its copy to prevent overwritten.
+            myPath = getenv("PATH");
+            myPathCopy = my_strdup(getenv("PATH"));
+            /*check if path has been retrive*/
+            if (myPath != NULL) {
+              // go thourgh every path
+              for (tok = strtok(myPathCopy, delim); tok != NULL;
+                   tok = strtok(NULL, delim)) {
+                // put slash(/), path, and command into an variable
+                snprintf(sort, MAX_CMDLINE_SIZE, "%s/%s", tok, cmd);
+                //  Check access
+                rvalx = access(sort, X_OK);
+                if (rvalx == 0) {
+                  break;
+                }
               }
+            } /*end if*/
+            else {
+              /*printing failure message*/
+              writeline(1, "ERROR: getenv(): Unable to obtain 'PATH'.");
             }
-          } /*end if*/
-          else {
-            /*printing failure message*/
-            printf("ERROR: getenv(): Unable to obtain 'PATH'.");
+            // fork()
+            cmd_pathname = sort;
+          } else {
+            rvalx = access(cmd, X_OK);
+            if (rvalx == 0) {
+              cmd_pathname = cmd;
+            }
           }
           // fork()
-          cmd_pathname = sort;
           pid = fork();
           /* First check if there was an error! */
           if (pid == -1) {
-            fprintf(stderr, "ERROR: calling fork()!\n");
+            /*printing failure message*/
+            writeline(1, "ERROR: calling fork()!\n");
             exit(EXIT_FAILURE);
           }
           /* Okay, if "I am the child... " */
@@ -211,10 +239,10 @@ int main(int argc, char *argv[]) {
             /* figure out what you want to do */ /* Then run a new
                                                               command/program */
             if (execve(cmd_pathname, cmdargs, environ) < 0) {
-              fprintf(stderr, "ERROR: execve().\n");
+              writeline(1, "ERROR: file or command not found!\n");
               exit(EXIT_FAILURE);
             } /* end if */
-          } /* end if */
+          }   /* end if */
           /* Otherwise, if "I am the parent..." */
           else if (pid > 0) {
             /* Let's wait for the child to finish (this will BLOCK)... */
@@ -222,22 +250,27 @@ int main(int argc, char *argv[]) {
             /* First check to see that wait() succeeded!
                    It could FAIL! */
             if (which_child == -1) {
-              fprintf(stderr, "ERROR: wait() failed!\n");
+              writeline(1, "ERROR: wait() failed!\n");
               exit(EXIT_FAILURE);
             }
 
             /* Otherwise, let's assume child exited by calling 'exit()' */
+            // Handling multiple operators
             else if (WIFEXITED(child_status)) {
-
-              /* Let's print some info... */
-              fprintf(stdout,
-                      "Looks like child PID %d returned with status = %d\n",
-                      which_child, WEXITSTATUS(child_status));
-              for (int k = 0; k < MAX_ARGS_PER_CMD; k++){
-                printf("%s\n",cmdargs[k]);  
+              if (child_status > 0) {
+                if (j < seqops_cnt) {
+                  if (seqops[j] == 1) {
+                    break;
+                  }
+                }
               }
-              printf("%s\n",cmd_pathname);
-
+              if (child_status == 0) {
+                if (j < seqops_cnt) {
+                  if (seqops[j] == 2) {
+                    break;
+                  }
+                }
+              }
             } /* end else */
 
           } /* end else-if() */
@@ -247,12 +280,11 @@ int main(int argc, char *argv[]) {
       }   // end for( each job )
 
     } else if (bytes_read == 0) {
-      // printf("readline(): Returned with code = %d\n", bytes_read);
-      // return (EXIT_SUCCESS);
       break;
     } // end if-else()
 
   } // end while()
-
+  // Print new line after exit(Crtl + D)
+  writeline(1, "\n");
   return (EXIT_SUCCESS);
 }
