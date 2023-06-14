@@ -20,19 +20,15 @@ bin  dev  home  lib32  lib64  media  opt  proc  root  run  sbin  snap usr
 The following table lists the commands that are supported by the shell:
 
 # Command	Description
-cd:	Change directory.
 echo:	Print text.
-exit:	Exit the shell.
-help:	Display help information.
-jobs:	List running jobs.
 kill:	Kill a job.
 ls:	List files and directories.
 pwd:	Print working directory.
-read:	Read a line of input.
 sleep:	Sleep for a specified amount of time.
-source:	Execute a script.
 test:	Evaluate a condition.
-wait:	Wait for a child process to finish.
+ctrl + D: to exit the program
+";" after the command to run more than one command
+&&,|| : to choose to do "and" operator or "or" operator
 
 # Scripts
 You can also run scripts from the shell. A script is a file that contains a series of commands. To run a script, type the following command:
