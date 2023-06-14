@@ -89,13 +89,11 @@ int scan_seqops(int seqops[], char *jobstr, size_t count) {
   for (i = 0; i < strlen(jobstr); ++i) {
     if (jobstr[i] == '&' && jobstr[i + 1] == '&') {
       seqops[countsq] = 1;
-      // printf("%d", seqops[countsq]);
       ++countsq;
     }
 
     if (jobstr[i] == '|' && jobstr[i + 1] == '|') {
       seqops[countsq] = 2;
-      // printf(" %d", seqops[countsq]);
       ++countsq;
     }
   }
@@ -124,14 +122,11 @@ int extract_cmd_args(char *simple_cmd, char **cmd, char *cmdargs[],
     cmdargs[i] = token;
     if (i == 0) {
       *cmd = cmdargs[0];
-      // printf("\t\tcmd = \"%s\"\n", cmdargs[i]);
     } else if (i > 0) {
-      // printf("\t\targ[%d] = \"%s\"\n", i - 1, cmdargs[i]);
     }
   }
 
   if (token == NULL && i == 1) {
-    // printf("\t\targ = (None supplied)\n");
   }
 
   return i;
@@ -150,18 +145,13 @@ int main(int argc, char *argv[]) {
   pid_t pid, which_child;
   int child_status;
   char *cmd_pathname;
-  // char *cmd_args[] = {cmd_pathname, "-l", "-F", "-h", NULL};
-
   // test for path
-  // const char *pathname = "/usr/bin/ls";
-
   while (1) {
     printf("Simple Shell Phoomintr Kaewvichien\n");
     // Show the prompt to the user.
     show_prompt(">> ");
     // Read a complete line and store in buffer 'cmdline'.
     bytes_read = readline(0, cmdline, MAX_CMDLINE_SIZE);
-    // printf("readline(): Got\"%s\" (rval = %d)\n", cmdline, bytes_read);
 
     // If we read anything (even an empty line).
     if (bytes_read > 0) {
@@ -171,9 +161,7 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < total_jobs; ++i) {
         // printf("Job #%d: \"%s\"\n", i, jobs[i]);
         //  Scan for sequence operators.
-        // printf("\tseqops[] = [ ");
         seqops_cnt = scan_seqops(seqops, jobs[i], MAX_SIMPLE_CMDS);
-        // printf(" ]\n");
         if (seqops_cnt > MAX_SIMPLE_CMDS) {
           printf("More seqops than MAX_SIMPLE_CMDS");
         }
@@ -183,7 +171,6 @@ int main(int argc, char *argv[]) {
 
         // For _each_ simple comand...
         for (int j = 0; j < total_simple_cmds; ++j) {
-          // printf("\tSimple Command #%d = \"%s\"\n", j, simple_cmds[j]);
           //  Extract the commands and the arguments.
           total_tokens =
               extract_cmd_args(simple_cmds[j], &cmd, cmdargs, MAX_ARGS_PER_CMD);
@@ -200,12 +187,9 @@ int main(int argc, char *argv[]) {
                  tok = strtok(NULL, delim)) {
               // put slash(/), path, and command into an variable
               snprintf(sort, MAX_CMDLINE_SIZE, "%s/%s", tok, cmd);
-              // printf("%s\n", sort);
               //  Check access
               rvalx = access(sort, X_OK);
-              // printf("X_OK = %d\n", rvalx);
               if (rvalx == 0) {
-                // printf("Found it!\n");
                 break;
               }
             }
@@ -253,7 +237,6 @@ int main(int argc, char *argv[]) {
                 printf("%s\n",cmdargs[k]);  
               }
               printf("%s\n",cmd_pathname);
-              // exit(EXIT_SUCCESS);
 
             } /* end else */
 
